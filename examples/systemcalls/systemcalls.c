@@ -1,4 +1,8 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -17,7 +21,21 @@ bool do_system(const char *cmd)
  *   or false() if it returned a failure
 */
 
-    return true;
+	if (cmd == NULL) {
+        return false;
+    }
+
+    int ret = system(cmd);
+
+    if (ret == -1) {
+        return false;
+    } else if (ret == 0) {
+    	return true;
+    }
+
+    
+    return false;
+
 }
 
 /**
@@ -45,10 +63,7 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
+ 	va_end(args);
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -59,9 +74,25 @@ bool do_exec(int count, ...)
  *
 */
 
-    va_end(args);
+	int status;
+	pid_t pid;
+	
+	pid = fork();
+	if (pid == -1) {
+		return false;
+	}	
+	else if (pid == 0) {
+		execv(command[0],command);
+		_exit(127);
+	}	
 
+   if (waitpid(pid, &status, 0) == -1) {
+   	return false;
+   }	
+   else if (WIFEXITED(status) && WEXITSTATUS(status) == 0)	{
     return true;
+   } 
+    return false;
 }
 
 /**
@@ -80,11 +111,8 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-
+    va_end(args);
+  
 /*
  * TODO
  *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
@@ -92,8 +120,35 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+	int fd;
+	int status;
+	pid_t pid;
+	
+	fd = open(outputfile, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+    if (fd == -1) {
+        return false;
+    }   
 
-    va_end(args);
+	pid = fork();
+	if (pid == -1) {
+		close(fd);
+		return false;
+	}
+	else if (dup2(fd, STDOUT_FILENO) == -1) {
+		_exit(1);
+	}	
+	else if (pid == 0) {
+		close(fd);
+		execv(command[0],command);
+		_exit(127);
+	}	
 
+	if (waitpid(pid, &status, 0) == -1) {
+   	return false;
+   }	
+   else if (WIFEXITED(status) && WEXITSTATUS(status) == 0)	{
     return true;
+   } 
+
+    return false;
 }
